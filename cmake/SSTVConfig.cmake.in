@@ -1,0 +1,19 @@
+@PACKAGE_INIT@
+
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIQUID QUIET IMPORTED_TARGET liquid)
+endif()
+if(NOT TARGET PkgConfig::LIQUID)
+    find_path(LIQUID_INCLUDE_DIR liquid/liquid.h REQUIRED)
+    find_library(LIQUID_LIBRARY NAMES liquid REQUIRED)
+    add_library(liquid_external UNKNOWN IMPORTED)
+    set_target_properties(liquid_external PROPERTIES
+        IMPORTED_LOCATION "${LIQUID_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${LIQUID_INCLUDE_DIR}"
+    )
+    add_library(PkgConfig::LIQUID ALIAS liquid_external)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/SSTVTargets.cmake")
+check_required_components(SSTV)

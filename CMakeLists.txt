@@ -7,6 +7,7 @@ include(CMakePackageConfigHelpers)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIQUID QUIET IMPORTED_TARGET liquid)
+    pkg_check_modules(HACKRF QUIET IMPORTED_TARGET libhackrf)
 endif()
 if(NOT TARGET PkgConfig::LIQUID)
     find_path(LIQUID_INCLUDE_DIR liquid/liquid.h REQUIRED)
@@ -44,6 +45,11 @@ add_executable(sstv_decoder tools/sstv_decode.c)
 target_link_libraries(sstv_decoder PRIVATE SSTV::sstv)
 add_executable(sstv_encoder tools/sstv_encode.c)
 target_link_libraries(sstv_encoder PRIVATE SSTV::sstv)
+if(TARGET PkgConfig::HACKRF)
+    find_package(Threads REQUIRED)
+    add_executable(sstv_hackrf_tx tools/sstv_hackrf_tx.c)
+    target_link_libraries(sstv_hackrf_tx PRIVATE SSTV::sstv PkgConfig::HACKRF Threads::Threads)
+endif()
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(sstv PRIVATE
@@ -55,6 +61,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(sstv_encoder PRIVATE
         -Wall -Wextra -Wpedantic -Wconversion -Wshadow
     )
+    if(TARGET sstv_hackrf_tx)
+        target_compile_options(sstv_hackrf_tx PRIVATE
+            -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+        )
+    endif()
 endif()
 
 if(BUILD_TESTING)
@@ -77,6 +88,9 @@ install(TARGETS sstv sstv_decoder sstv_encoder
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(TARGET sstv_hackrf_tx)
+    install(TARGETS sstv_hackrf_tx RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT SSTVTargets
     FILE SSTVTargets.cmake

@@ -17,6 +17,7 @@ fixed sample rate of 12800 Hz.
 - Consecutive frame decoding from a single input stream.
 - Explicit complete, truncated, and aborted frame events.
 - Standalone PPM-to-IQ and IQ-to-PPM command-line tools.
+- Direct streaming transmission of a PPM image with HackRF.
 
 Supported modes:
 
@@ -45,6 +46,7 @@ Supported modes:
 - A C99 compiler
 - CMake 3.16 or newer
 - [liquid-dsp](https://github.com/jgaeddert/liquid-dsp)
+- Optional: libhackrf (builds the `sstv_hackrf_tx` utility)
 
 CMake first looks for liquid-dsp through `pkg-config`, then falls back to
 searching for its header and library directly.
@@ -199,6 +201,23 @@ Complete frames are written as `output_prefix_000.ppm`,
 `output_prefix_001.ppm`, and so on. An incomplete I/Q pair is treated as an
 input format error. Truncated frames are reported but not written as complete
 images.
+
+### Transmit with HackRF
+
+```sh
+build/sstv_hackrf_tx --frequency 145500000 --power 20 --amp off M1 input_320x256.ppm
+```
+
+`--frequency` is the RF carrier frequency in Hz. `--power` controls the HackRF
+TX VGA gain from 0 to 47 dB and defaults to 0 (`--txvga` is an alias). This is
+a gain setting, not a calibrated output value in dBm. `--amp` controls the
+HackRF RF amplifier and defaults to `off`. Use `--serial ID` to select a device
+when more than one HackRF is connected. The image requirements are the same as
+for `sstv_encoder`. IQ is linearly resampled to 2 MHz and streamed to the
+device; press Ctrl-C to stop early.
+
+Start at low gain and use a suitable antenna, RF filtering, and a frequency on
+which you are permitted to transmit.
 
 ## Tests
 

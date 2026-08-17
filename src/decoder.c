@@ -198,13 +198,14 @@ static int vis_decode_capture(const float complex *cap) {
         const float complex *block = cap + VIS_BIT_SAMPLES * (1 + i);
         double               power0, power1;
         sstv_goertzel_pair_power(block, VIS_BIT_SAMPLES, 1100.0, 1300.0, FS, &power0, &power1, NULL);
-        bits[i] = (power1 > power0) ? 1 : 0;
+        /* VIS uses 1100 Hz for binary one and 1300 Hz for zero. */
+        bits[i] = (power0 > power1) ? 1 : 0;
     }
     {
         const float complex *block = cap + VIS_BIT_SAMPLES * 8;
         double               power0, power1;
         sstv_goertzel_pair_power(block, VIS_BIT_SAMPLES, 1100.0, 1300.0, FS, &power0, &power1, NULL);
-        parity_bit = (power1 > power0) ? 1 : 0;
+        parity_bit = (power0 > power1) ? 1 : 0;
     }
 
     int code = 0, ones = 0;
@@ -616,6 +617,60 @@ static bool stream_try_decode_gbr_rgb_bw(sstv_decoder_t *s) {
     return true;
 }
 
+/* Scottie places the sync pulse between the blue and red scans:
+ * separator, green, separator, blue, sync, porch, red.  The sync pulse is
+ * therefore the stable timing anchor in the middle of a scan line. */
+static bool stream_try_decode_scottie(sstv_decoder_t *s) {
+    const sstv_mode_t *m = s->mode;
+    int width = m->width;
+    long line_samples = (long) llround(m->line_time * FS);
+    int sync_samples = (int) llround(m->sync_time * FS);
+    int porch_samples = (int) llround(m->porch_time * FS);
+    double pixel_samples = m->pixel_time * FS;
+    double scan_samples = pixel_samples * width;
+    long search_radius = line_samples / 20;
+
+    long before_sync = (long) llround(2.0 * (porch_samples + scan_samples));
+    if (s->first_line && s->expected_start_abs == 0)
+        s->expected_start_abs = before_sync;
+
+    long need = search_radius + sync_samples + porch_samples + (long) ceil(scan_samples);
+    long min_need = sync_samples + porch_samples + (long) ceil(scan_samples) - SSTV_FLUSH_TOLERANCE_SAMPLES;
+    long rel_expected, avail;
+    if (!sstv_prepare_window(s, need, min_need, &rel_expected, &avail))
+        return false;
+
+    int sync_start = find_sync_start(s->scratch, avail, rel_expected, search_radius, sync_samples);
+    s->first_line = false;
+    double green_pos = (double) sync_start - 2.0 * (porch_samples + scan_samples) + porch_samples;
+    double blue_pos = green_pos + scan_samples + porch_samples;
+    double red_pos = (double) sync_start + sync_samples + porch_samples;
+
+    for (int px = 0; px < width; ++px) {
+        double offset = px * pixel_samples;
+        uint8_t g = freq_to_level(weighted_average_freq(s->scratch, avail, green_pos + offset,
+                                                         green_pos + offset + pixel_samples));
+        uint8_t b = freq_to_level(weighted_average_freq(s->scratch, avail, blue_pos + offset,
+                                                         blue_pos + offset + pixel_samples));
+        uint8_t r = freq_to_level(weighted_average_freq(s->scratch, avail, red_pos + offset,
+                                                         red_pos + offset + pixel_samples));
+        s->rgb_row0[px * 3 + 0] = r;
+        s->rgb_row0[px * 3 + 1] = g;
+        s->rgb_row0[px * 3 + 2] = b;
+    }
+    if (s->callbacks.on_line)
+        s->callbacks.on_line(s->user_data, s->next_row, width, s->rgb_row0);
+    s->next_row++;
+
+    long new_expected_abs = s->freq_base_abs + sync_start + line_samples;
+    /* Unlike modes whose payload follows sync, the next Scottie row needs
+     * both color scans preceding its sync pulse. */
+    sstv_advance(s, new_expected_abs, before_sync + search_radius);
+    if (sstv_frame_done(s))
+        sstv_finish_frame(s);
+    return true;
+}
+
 static bool stream_try_decode_pd(sstv_decoder_t *s) {
     const sstv_mode_t *m = s->mode;
     int                width = m->width;
@@ -843,6 +898,9 @@ static bool stream_try_decode_one(sstv_decoder_t *s) {
         return false;
     switch (s->mode->encoding) {
         case SSTV_ENC_GBR:
+            if (s->mode->vis_code == 60 || s->mode->vis_code == 56 || s->mode->vis_code == 76)
+                return stream_try_decode_scottie(s);
+            return stream_try_decode_gbr_rgb_bw(s);
         case SSTV_ENC_RGB:
         case SSTV_ENC_BW:
             return stream_try_decode_gbr_rgb_bw(s);

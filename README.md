@@ -38,6 +38,7 @@ Supported modes:
 - `src/` — library implementation
 - `tools/sstv_encode.c` — PPM-to-IQ command-line tool
 - `tools/sstv_decode.c` — IQ-to-PPM command-line tool
+- `tools/sstv_wav_decode.c` — WAV audio-to-PPM test tool
 - `tests/` — streaming and encoder/decoder round-trip tests
 - `demo/` — example IQ streams and decoded images
 
@@ -201,6 +202,17 @@ Complete frames are written as `output_prefix_000.ppm`,
 `output_prefix_001.ppm`, and so on. An incomplete I/Q pair is treated as an
 input format error. Truncated frames are reported but not written as complete
 images.
+
+### Decode WAV audio to PPM
+
+```sh
+build/sstv_wav_decoder input.wav output_prefix
+```
+
+The test utility accepts standard 8/16/24/32-bit PCM and 32-bit float WAV
+files, mixes multichannel input to mono, converts it to an analytic signal,
+and resamples it to the decoder's fixed 12800 Hz rate. It returns an error if
+the input contains no complete SSTV frame.
 
 ### Transmit with HackRF
 

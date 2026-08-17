@@ -79,10 +79,10 @@ static bool write_vis(writer_t *writer, int code) {
     for (int bit = 0; bit < 7; ++bit) {
         int value = (code >> bit) & 1;
         parity ^= value;
-        if (!write_tone(writer, value ? 1300.0 : 1100.0, 0.030))
+        if (!write_tone(writer, value ? 1100.0 : 1300.0, 0.030))
             return false;
     }
-    return write_tone(writer, parity ? 1300.0 : 1100.0, 0.030) &&
+    return write_tone(writer, parity ? 1100.0 : 1300.0, 0.030) &&
            write_tone(writer, 1200.0, 0.030);
 }
 
@@ -134,6 +134,27 @@ static bool encode_basic(writer_t *writer, const sstv_mode_t *mode, const uint8_
             if (channel + 1 < count && mode->separator_time > 0)
                 if (!write_tone(writer, 1500.0, mode->separator_time))
                     return false;
+        }
+    }
+    return true;
+}
+
+static bool encode_scottie(writer_t *writer, const sstv_mode_t *mode, const uint8_t *rgb, size_t stride) {
+    uint8_t channel[MAX_WIDTH];
+    static const int order[] = { 1, 2, 0 }; /* green, blue, red */
+    for (int y = 0; y < mode->transmitted_lines && writer->ok; ++y) {
+        const uint8_t *row = row_at(rgb, stride, y);
+        for (int part = 0; part < 3; ++part) {
+            if (part == 2) {
+                if (!write_tone(writer, 1200.0, mode->sync_time))
+                    return false;
+            }
+            if (!write_tone(writer, 1500.0, mode->porch_time))
+                return false;
+            for (int x = 0; x < mode->width; ++x)
+                channel[x] = row[3 * x + order[part]];
+            if (!write_channel(writer, channel, mode->width, mode->pixel_time))
+                return false;
         }
     }
     return true;
@@ -220,6 +241,12 @@ bool sstv_encode_rgb(const sstv_mode_t *mode, const uint8_t *rgb, size_t stride,
     bool encoded;
     switch (mode->encoding) {
         case SSTV_ENC_GBR:
+            if (mode->vis_code == 60 || mode->vis_code == 56 || mode->vis_code == 76) {
+                encoded = encode_scottie(&writer, mode, rgb, stride);
+                break;
+            }
+            encoded = encode_basic(&writer, mode, rgb, stride);
+            break;
         case SSTV_ENC_RGB:
         case SSTV_ENC_BW:
             encoded = encode_basic(&writer, mode, rgb, stride);

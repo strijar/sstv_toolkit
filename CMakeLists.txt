@@ -43,6 +43,8 @@ set_target_properties(sstv PROPERTIES
 
 add_executable(sstv_decoder tools/sstv_decode.c)
 target_link_libraries(sstv_decoder PRIVATE SSTV::sstv)
+add_executable(sstv_wav_decoder tools/sstv_wav_decode.c)
+target_link_libraries(sstv_wav_decoder PRIVATE SSTV::sstv)
 add_executable(sstv_encoder tools/sstv_encode.c)
 target_link_libraries(sstv_encoder PRIVATE SSTV::sstv)
 if(TARGET PkgConfig::HACKRF)
@@ -56,6 +58,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wall -Wextra -Wpedantic -Wconversion -Wshadow
     )
     target_compile_options(sstv_decoder PRIVATE
+        -Wall -Wextra -Wpedantic -Wconversion -Wshadow
+    )
+    target_compile_options(sstv_wav_decoder PRIVATE
         -Wall -Wextra -Wpedantic -Wconversion -Wshadow
     )
     target_compile_options(sstv_encoder PRIVATE
@@ -82,7 +87,7 @@ if(BUILD_TESTING)
     add_test(NAME encoder_decoder_roundtrip COMMAND test_roundtrip)
 endif()
 
-install(TARGETS sstv sstv_decoder sstv_encoder
+install(TARGETS sstv sstv_decoder sstv_wav_decoder sstv_encoder
     EXPORT SSTVTargets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
